@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Palabra del día: MVC</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+
+  :root{
+    --bg: #050705;
+    --green: #39ff6a;
+    --green-dim: #1e8f3e;
+    --amber: #ffb000;
+    --blue: #3ac7ff;
+    --orange: #ff8c3a;
+    --red: #ff3b3b;
+    --text: #c8ffd4;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{
+    width:100%; height:100%;
+    background:var(--bg);
+    overflow:hidden;
+    font-family:'JetBrains Mono', monospace;
+  }
+
+  #stage{
+    position:relative;
+    width:100vw; height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:radial-gradient(ellipse at center, #0a1208 0%, #000 100%);
+  }
+
+  /* CRT overlay effects */
+  #crt-overlay{
+    pointer-events:none;
+    position:absolute; inset:0;
+    z-index:50;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0) 0px,
+        rgba(0,0,0,0.15) 1px,
+        rgba(0,0,0,0) 2px
+      );
+    mix-blend-mode:overlay;
+  }
+  #crt-vignette{
+    pointer-events:none;
+    position:absolute; inset:0;
+    z-index:51;
+    box-shadow: inset 0 0 12vw 2vw rgba(0,0,0,0.85);
+  }
+  #flicker{
+    pointer-events:none;
+    position:absolute; inset:0;
+    z-index:52;
+    background:rgba(57,255,106,0.02);
+    animation:flicker 0.15s infinite;
+  }
+  @keyframes flicker{
+    0%{opacity:.6}
+    50%{opacity:1}
+    100%{opacity:.7}
+  }
+
+  #screen{
+    position:relative;
+    width:min(94vw, 800px);
+    height:min(94vw*0.5625, 450px);
+    background:#020402;
+    border:2px solid var(--green-dim);
+    border-radius:10px;
+    box-shadow:
+      0 0 40px rgba(57,255,106,0.25),
+      inset 0 0 60px rgba(0,0,0,0.9);
+    overflow:hidden;
+  }
+
+  .scene{
+    position:absolute; inset:0;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:5%;
+    text-align:center;
+  }
+  .scene.active{ display:flex; }
+
+  /* progress bar */
+  #progress-wrap{
+    position:absolute;
+    bottom:10px; left:6%; right:6%;
+    height:4px;
+    background:rgba(57,255,106,0.15);
+    z-index:40;
+    border-radius:2px;
+    overflow:hidden;
+  }
+  #progress-bar{
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg, var(--green-dim), var(--green));
+    box-shadow:0 0 8px var(--green);
+  }
+
+  #timecode{
+    position:absolute;
+    top:10px; right:14px;
+    font-size:11px;
+    color:var(--green-dim);
+    letter-spacing:1px;
+    z-index:40;
+  }
+  #scene-label{
+    position:absolute;
+    top:10px; left:14px;
+    font-size:10px;
+    color:var(--amber);
+    letter-spacing:2px;
+    z-index:40;
+    opacity:0.8;
+  }
+
+  .cursor{
+    display:inline-block;
+    width:0.55em;
+    background:var(--green);
+    animation:blink 0.9s steps(1) infinite;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  .big{
+    font-size:clamp(22px, 5vw, 40px);
+    font-weight:800;
+    color:var(--green);
+    text-shadow:0 0 12px rgba(57,255,106,0.7);
+    letter-spacing:2px;
+  }
+  .mid{
+    font-size:clamp(14px, 2.6vw, 20px);
+    color:var(--text);
+    line-height:1.5;
+    max-width:90%;
+  }
+  .small{
+    font-size:clamp(11px, 1.8vw, 14px);
+    color:var(--green-dim);
+    margin-top:14px;
+    letter-spacing:1px;
+  }
+
+  /* Scene 1: prompt */
+  #scene-prompt .big{ margin-bottom:6px; }
+
+  /* Scene 2: MVC reveal */
+  .mvc-big{
+    font-size:clamp(60px, 14vw, 130px);
+    font-weight:800;
+    letter-spacing:10px;
+    color:var(--green);
+    text-shadow:0 0 30px rgba(57,255,106,0.9), 0 0 60px rgba(57,255,106,0.4);
+  }
+  .scramble-char{ display:inline-block; }
+
+  /* Scene 3: definition */
+  .def-line{ opacity:0; transform:translateY(8px); transition:all 0.8s ease; }
+  .def-line.show{ opacity:1; transform:translateY(0); }
+
+  /* Scene 4: three columns */
+  #cols{
+    display:flex;
+    width:100%;
+    height:100%;
+    gap:2%;
+  }
+  .col{
+    flex:1;
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:6px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:4%;
+    opacity:0.25;
+    transform:scale(0.94);
+    transition:all 0.8s ease;
+    background:rgba(255,255,255,0.02);
+  }
+  .col.active{
+    opacity:1;
+    transform:scale(1.03);
+  }
+  .col-title{
+    font-size:clamp(16px,2.6vw,22px);
+    font-weight:800;
+    letter-spacing:2px;
+    margin-bottom:8px;
+  }
+  .col-model .col-title{ color:var(--blue); text-shadow:0 0 10px var(--blue); }
+  .col-view .col-title{ color:var(--green); text-shadow:0 0 10px var(--green); }
+  .col-controller .col-title{ color:var(--orange); text-shadow:0 0 10px var(--orange); }
+  .col-desc{
+    font-size:clamp(10px,1.7vw,13px);
+    color:var(--text);
+    line-height:1.4;
+  }
+  .col.active .col-model{ }
+  .col-model{ border-color:var(--blue); }
+  .col-view{ border-color:var(--green); }
+  .col-controller{ border-color:var(--orange); }
+
+  /* Scene 5: dato curioso */
+  .badge{
+    display:inline-block;
+    background:var(--red);
+    color:#fff;
+    font-weight:800;
+    font-size:clamp(11px,1.8vw,14px);
+    letter-spacing:2px;
+    padding:4px 14px;
+    border-radius:3px;
+    margin-bottom:14px;
+    animation:pulse-badge 1s infinite;
+  }
+  @keyframes pulse-badge{
+    0%,100%{ box-shadow:0 0 0 rgba(255,59,59,0.6); }
+    50%{ box-shadow:0 0 18px rgba(255,59,59,0.6); }
+  }
+
+  /* Scene 6: frameworks carousel */
+  #fw-track{
+    display:flex;
+    gap:24px;
+    font-size:clamp(16px,3vw,26px);
+    font-weight:700;
+    color:var(--green-dim);
+  }
+  #fw-track span{
+    opacity:0.3;
+    transition:all 0.8s ease;
+  }
+  #fw-track span.active{
+    opacity:1;
+    color:var(--green);
+    text-shadow:0 0 12px var(--green);
+    transform:scale(1.15);
+  }
+
+  /* Scene 7: pizza analogy */
+  #pizza-flow{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    font-size:clamp(28px,5vw,46px);
+    margin-bottom:16px;
+  }
+  #pizza-flow .step{
+    opacity:0.2;
+    transition:all 0.4s ease;
+  }
+  #pizza-flow .step.active{
+    opacity:1;
+    transform:scale(1.2);
+  }
+  #pizza-flow .arrow{
+    color:var(--green-dim);
+    font-size:clamp(16px,3vw,24px);
+  }
+  .pizza-label{
+    opacity:0;
+    transition:opacity 0.8s ease;
+    min-height:2.6em;
+  }
+  .pizza-label.show{ opacity:1; }
+
+  /* Scene 8: closing */
+  #scene-close .mvc-mini{
+    font-size:clamp(30px,6vw,50px);
+    font-weight:800;
+    color:var(--green);
+    letter-spacing:6px;
+    text-shadow:0 0 20px rgba(57,255,106,0.7);
+    margin-bottom:10px;
+  }
+
+  #replay-btn{
+    position:absolute;
+    bottom:20px; left:50%;
+    transform:translate(-50%, 20px);
+    background:transparent;
+    border:1px solid var(--green);
+    color:var(--green);
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:2px;
+    padding:8px 18px;
+    border-radius:4px;
+    cursor:pointer;
+    opacity:0;
+    pointer-events:none;
+    transition:all 0.8s ease;
+    z-index:60;
+  }
+  #replay-btn.show{
+    opacity:1;
+    pointer-events:auto;
+    transform:translate(-50%, 0);
+  }
+  #replay-btn:hover{
+    background:rgba(57,255,106,0.1);
+    box-shadow:0 0 14px rgba(57,255,106,0.4);
+  }
+
+  .glitch-flash{
+    animation:glitchflash 0.6s steps(2);
+  }
+  @keyframes glitchflash{
+    0%{ filter:invert(0); }
+    50%{ filter:invert(1) hue-rotate(60deg); }
+    100%{ filter:invert(0); }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="screen">
+
+    <div id="scene-label">PALABRA DEL DÍA</div>
+    <div id="timecode">00:00</div>
+
+    <!-- SCENE 1: prompt -->
+    <div class="scene active" id="scene-prompt">
+      <div class="big" id="prompt-text"></div>
+    </div>
+
+    <!-- SCENE 2: MVC reveal -->
+    <div class="scene" id="scene-mvc">
+      <div class="mvc-big" id="mvc-reveal"></div>
+    </div>
+
+    <!-- SCENE 3: definition -->
+    <div class="scene" id="scene-def">
+      <div class="def-line mid" id="def-1">MVC: Model – View – Controller.</div>
+      <div class="def-line mid" id="def-2">Un patrón de arquitectura que separa tu app en tres piezas...</div>
+      <div class="def-line small" id="def-3">...que se odian trabajar juntas, pero no pueden vivir separadas.</div>
+    </div>
+
+    <!-- SCENE 4: three columns -->
+    <div class="scene" id="scene-cols">
+      <div id="cols">
+        <div class="col col-model" id="col-model">
+          <div class="col-title">MODEL</div>
+          <div class="col-desc">Es la data. La verdad. No sabe que existe una pantalla — solo guarda y valida información.</div>
+        </div>
+        <div class="col col-view" id="col-view">
+          <div class="col-title">VIEW</div>
+          <div class="col-desc">La cara bonita. Lo que el usuario ve y toca. No piensa, no decide, solo muestra.</div>
+        </div>
+        <div class="col col-controller" id="col-controller">
+          <div class="col-title">CONTROLLER</div>
+          <div class="col-desc">El mediador. Recibe la orden, pregunta al Model, y le dice a la View qué mostrar.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 5: dato curioso -->
+    <div class="scene" id="scene-dato">
+      <div class="badge">DATO CURIOSO</div>
+      <div class="mid">MVC nació en los 70s, en Xerox PARC — el mismo lugar que inventó el mouse y la interfaz gráfica.</div>
+      <div class="small">Lo creó Trygve Reenskaug para Smalltalk, mucho antes de que existiera la web.</div>
+    </div>
+
+    <!-- SCENE 6: frameworks -->
+    <div class="scene" id="scene-fw">
+      <div class="mid" style="margin-bottom:18px;">Hoy vive en...</div>
+      <div id="fw-track">
+        <span>Rails</span><span>Django</span><span>Laravel</span><span>ASP.NET</span><span>MVVM</span><span>MVP</span>
+      </div>
+      <div class="small" style="margin-top:20px;">Sin esto, tu código se vuelve spaghetti que ni Italia reconoce.</div>
+    </div>
+
+    <!-- SCENE 7: pizza analogy -->
+    <div class="scene" id="scene-pizza">
+      <div id="pizza-flow">
+        <span class="step" id="p-phone">📱</span>
+        <span class="arrow">→</span>
+        <span class="step" id="p-kitchen">👨‍🍳</span>
+        <span class="arrow">→</span>
+        <span class="step" id="p-plate">🍕</span>
+      </div>
+      <div class="mid pizza-label" id="p-label"></div>
+    </div>
+
+    <!-- SCENE 8: closing -->
+    <div class="scene" id="scene-close">
+      <div class="mvc-mini">MVC</div>
+      <div class="mid">Divide, organiza, conquista.</div>
+      <div class="small" id="close-status">[ FIN DE TRANSMISIÓN ]</div>
+    </div>
+
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+  </div>
+
+  <div id="crt-overlay"></div>
+  <div id="crt-vignette"></div>
+  <div id="flicker"></div>
+  <button id="replay-btn">▶ REPRODUCIR DE NUEVO</button>
+</div>
+
+<script>
+const TOTAL_MS = 110000; // ~60s total, matches script timing
+let startTime = null;
+let rafId = null;
+let timeouts = [];
+
+function clearAllTimeouts(){
+  timeouts.forEach(t => clearTimeout(t));
+  timeouts = [];
+}
+
+function scheduleTimeout(fn, delay){
+  const id = setTimeout(fn, delay);
+  timeouts.push(id);
+}
+
+function showScene(id){
+  document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function typeText(el, text, speed=65, cb){
+  el.innerHTML = '';
+  let i = 0;
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  cursor.textContent = '_';
+  function step(){
+    if(i <= text.length){
+      el.textContent = text.slice(0, i);
+      el.appendChild(cursor);
+      i++;
+      scheduleTimeout(step, speed);
+    } else {
+      if(cb) cb();
+    }
+  }
+  step();
+}
+
+function scrambleReveal(el, finalText, duration=900){
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!<>-_/\\#$%&';
+  const len = finalText.length;
+  let frame = 0;
+  const totalFrames = Math.floor(duration / 40);
+  el.innerHTML = '';
+  const spans = [];
+  for(let i=0;i<len;i++){
+    const s = document.createElement('span');
+    s.className = 'scramble-char';
+    s.textContent = finalText[i] === ' ' ? '\u00A0' : chars[Math.floor(Math.random()*chars.length)];
+    el.appendChild(s);
+    spans.push(s);
+  }
+  function tick(){
+    frame++;
+    const revealCount = Math.floor((frame/totalFrames) * len);
+    for(let i=0;i<len;i++){
+      if(finalText[i] === ' '){ spans[i].textContent = '\u00A0'; continue; }
+      if(i < revealCount){
+        spans[i].textContent = finalText[i];
+      } else {
+        spans[i].textContent = chars[Math.floor(Math.random()*chars.length)];
+      }
+    }
+    if(frame < totalFrames){
+      scheduleTimeout(tick, 40);
+    } else {
+      el.textContent = finalText;
+    }
+  }
+  tick();
+}
+
+function flashGlitch(){
+  const screen = document.getElementById('screen');
+  screen.classList.add('glitch-flash');
+  scheduleTimeout(() => screen.classList.remove('glitch-flash'), 250);
+}
+
+function updateTimecode(ms){
+  const s = Math.floor(ms/1000);
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  document.getElementById('timecode').textContent = `${mm}:${ss}`;
+}
+
+function progressLoop(){
+  const now = performance.now();
+  const elapsed = now - startTime;
+  const pct = Math.min(100, (elapsed/TOTAL_MS)*100);
+  document.getElementById('progress-bar').style.width = pct + '%';
+  updateTimecode(elapsed);
+  if(elapsed < TOTAL_MS){
+    rafId = requestAnimationFrame(progressLoop);
+  }
+}
+
+function runSequence(){
+  clearAllTimeouts();
+  if(rafId) cancelAnimationFrame(rafId);
+  startTime = performance.now();
+  rafId = requestAnimationFrame(progressLoop);
+  document.getElementById('replay-btn').classList.remove('show');
+
+const voice = document.getElementById("voice");
+
+if (voice){
+
+    voice.pause();
+
+    voice.currentTime = 0;
+
+    voice.volume = 1;
+
+    voice.load();
+
+    voice.addEventListener("canplaythrough", () => {
+
+        voice.play().catch(err => console.log(err));
+
+    }, { once:true });
+
+}
+
+  // SCENE 1: 0:00 - 0:05  prompt
+  showScene('scene-prompt');
+  typeText(document.getElementById('prompt-text'), 'LA PALABRA DEL DÍA ES...?', 40);
+
+  // SCENE 2: 0:05 - 0:12 MVC reveal
+  scheduleTimeout(() => {
+    showScene('scene-mvc');
+    flashGlitch();
+    scrambleReveal(document.getElementById('mvc-reveal'), 'MVC', 900);
+  }, 1700);
+
+  // SCENE 3: 0:12 - 0:20 definition
+  scheduleTimeout(() => {
+    showScene('scene-def');
+    document.getElementById('def-1').classList.add('show');
+  }, 4000);
+  scheduleTimeout(() => document.getElementById('def-2').classList.add('show'), 8000);
+  scheduleTimeout(() => document.getElementById('def-3').classList.add('show'), 12400);
+
+  // SCENE 4: 0:20 - 0:33 three columns
+  scheduleTimeout(() => {
+    showScene('scene-cols');
+    document.getElementById('col-model').classList.add('active');
+  }, 17500);
+  scheduleTimeout(() => {
+    document.getElementById('col-model').classList.remove('active');
+    document.getElementById('col-view').classList.add('active');
+  }, 26200);
+  scheduleTimeout(() => {
+    document.getElementById('col-view').classList.remove('active');
+    document.getElementById('col-controller').classList.add('active');
+  }, 34800);
+  scheduleTimeout(() => {
+    document.getElementById('col-model').classList.add('active');
+    document.getElementById('col-view').classList.add('active');
+  }, 41000);
+
+  // SCENE 5: 0:33 - 0:42 dato curioso
+  scheduleTimeout(() => {
+    flashGlitch();
+    showScene('scene-dato');
+  }, 44180);
+
+  // SCENE 6: 0:42 - 0:50 frameworks
+  scheduleTimeout(() => {
+    showScene('scene-fw');
+    const spans = document.querySelectorAll('#fw-track span');
+    spans.forEach((s, idx) => {
+      scheduleTimeout(() => {
+        spans.forEach(x => x.classList.remove('active'));
+        s.classList.add('active');
+      }, idx * 2500);
+    });
+  }, 61000);
+
+  // SCENE 7: 0:50 - 0:56 pizza
+  scheduleTimeout(() => {
+    showScene('scene-pizza');
+    const label = document.getElementById('p-label');
+    document.getElementById('p-phone').classList.add('active');
+    label.textContent = 'Pides una pizza (Controller)';
+    label.classList.add('show');
+  }, 84000);
+  scheduleTimeout(() => {
+    document.getElementById('p-phone').classList.remove('active');
+    document.getElementById('p-kitchen').classList.add('active');
+    const label = document.getElementById('p-label');
+    label.classList.remove('show');
+    scheduleTimeout(() => {
+      label.textContent = 'El cocinero prepara los ingredientes (Model)';
+      label.classList.add('show');
+    }, 150);
+  }, 89000);
+  scheduleTimeout(() => {
+    document.getElementById('p-kitchen').classList.remove('active');
+    document.getElementById('p-plate').classList.add('active');
+    const label = document.getElementById('p-label');
+    label.classList.remove('show');
+    scheduleTimeout(() => {
+      label.textContent = 'El mesero te la trae a la mesa (View)';
+      label.classList.add('show');
+    }, 150);
+  }, 93000);
+
+  // SCENE 8: 0:56 - 1:00 closing
+  scheduleTimeout(() => {
+    flashGlitch();
+    showScene('scene-close');
+  }, 99000);
+
+  // END
+  scheduleTimeout(() => {
+    document.getElementById('replay-btn').classList.add('show');
+  }, 105000);
+}
+
+document.getElementById('replay-btn').addEventListener('click', runSequence);
+
+// Autoplay on load
+// Espera el primer clic del usuario
+window.addEventListener("click", () => {
+
+    runSequence();
+
+}, { once:true });
+</script>
+<audio
+    id="voice"
+    preload="auto"
+    playsinline
+>
+    <source src="audios/voz.mp3" type="audio/mpeg">
+</audio>
+
+</body>
+</html>
